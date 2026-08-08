@@ -1,0 +1,425 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Quicksand:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg-1:#0a0518;
+  --bg-2:#160a30;
+  --bg-3:#221049;
+  --gold:#f4c95d;
+  --gold-bright:#ffe08a;
+  --purple:#8a5cf6;
+  --pink:#f7539e;
+  --teal:#4de3c1;
+  --text:#eae6ff;
+  --text-dim:#b3a8d9;
+  --danger:#ff6b6b;
+  --success:#5ce6a6;
+  --panel-bg:rgba(22, 12, 48, 0.72);
+  --panel-border:rgba(244, 201, 93, 0.25);
+  --shadow-glow:0 0 40px rgba(138, 92, 246, 0.25);
+}
+
+*{box-sizing:border-box;}
+
+html,body{
+  margin:0;
+  padding:0;
+  width:100%;
+  min-height:100%;
+  background:radial-gradient(ellipse at 50% -10%, var(--bg-3), var(--bg-2) 45%, var(--bg-1) 100%);
+  color:var(--text);
+  font-family:'Quicksand', sans-serif;
+  overflow-x:hidden;
+}
+
+#starfield{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+}
+
+#app{
+  position:relative;
+  z-index:1;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+
+/* ---------- Screens ---------- */
+.screen{
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  width:100%;
+  max-width:920px;
+  opacity:0;
+  transform:translateY(18px) scale(0.98);
+  transition:opacity 0.55s ease, transform 0.55s ease;
+}
+.screen.active{
+  display:flex;
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+
+/* ---------- Icon button (mute) ---------- */
+.icon-btn{
+  position:fixed;
+  top:16px;
+  right:16px;
+  z-index:50;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  border:1px solid var(--panel-border);
+  background:rgba(22,12,48,0.75);
+  color:var(--gold);
+  font-size:18px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  backdrop-filter:blur(6px);
+  transition:transform 0.2s ease, box-shadow 0.2s ease;
+}
+.icon-btn:hover{
+  transform:scale(1.08);
+  box-shadow:0 0 18px rgba(244,201,93,0.35);
+}
+
+/* ---------- Start screen ---------- */
+.floating-emblem{
+  font-size:56px;
+  margin-bottom:6px;
+  filter:drop-shadow(0 0 18px rgba(244,201,93,0.6));
+  animation:float 3.4s ease-in-out infinite;
+}
+@keyframes float{
+  0%,100%{transform:translateY(0) rotate(-4deg);}
+  50%{transform:translateY(-14px) rotate(4deg);}
+}
+
+.eyebrow{
+  letter-spacing:0.3em;
+  text-transform:uppercase;
+  font-size:12px;
+  color:var(--text-dim);
+  margin:0 0 10px;
+}
+
+.game-title{
+  font-family:'Cinzel Decorative', serif;
+  font-size:clamp(2.4rem, 7vw, 4.6rem);
+  line-height:1.05;
+  margin:0 0 18px;
+  background:linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 45%, var(--pink) 110%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  filter:drop-shadow(0 0 26px rgba(244,201,93,0.35));
+  letter-spacing:0.03em;
+}
+
+.subtitle{
+  color:var(--text-dim);
+  font-size:1.05rem;
+  margin:0 0 34px;
+  line-height:1.6;
+}
+.olek-name{
+  color:var(--gold-bright);
+  font-weight:700;
+  letter-spacing:0.08em;
+  text-shadow:0 0 16px rgba(244,201,93,0.55);
+}
+
+.hint-text{
+  margin-top:22px;
+  font-size:0.9rem;
+  color:var(--text-dim);
+}
+
+/* ---------- Buttons ---------- */
+.btn{
+  font-family:'Quicksand', sans-serif;
+  font-weight:700;
+  font-size:1.05rem;
+  padding:16px 38px;
+  border-radius:50px;
+  border:none;
+  cursor:pointer;
+  position:relative;
+  letter-spacing:0.03em;
+  transition:transform 0.18s ease, box-shadow 0.25s ease, filter 0.2s ease;
+}
+.btn:active{ transform:scale(0.96); }
+
+.btn-primary{
+  background:linear-gradient(135deg, var(--gold-bright), var(--gold) 55%, var(--pink));
+  color:#241035;
+  box-shadow:0 8px 30px rgba(244,201,93,0.35), 0 0 0 1px rgba(255,255,255,0.15) inset;
+}
+.btn-primary:hover{
+  filter:brightness(1.08);
+  box-shadow:0 10px 36px rgba(244,201,93,0.55), 0 0 0 1px rgba(255,255,255,0.2) inset;
+  transform:translateY(-2px);
+}
+.btn-primary:disabled{
+  opacity:0.45;
+  cursor:not-allowed;
+  filter:grayscale(0.4);
+  transform:none;
+}
+
+.btn-secondary{
+  margin-top:26px;
+  background:transparent;
+  color:var(--gold-bright);
+  border:1.5px solid var(--panel-border);
+  box-shadow:none;
+}
+.btn-secondary:hover{
+  background:rgba(244,201,93,0.1);
+  border-color:var(--gold);
+}
+
+/* ---------- Panels (puzzle / maze) ---------- */
+.panel{
+  background:var(--panel-bg);
+  border:1px solid var(--panel-border);
+  border-radius:22px;
+  padding:36px clamp(18px, 4vw, 46px);
+  backdrop-filter:blur(10px);
+  box-shadow:var(--shadow-glow), 0 20px 60px rgba(0,0,0,0.4);
+  width:100%;
+}
+.panel-wide{ max-width:none; }
+
+.chapter-label{
+  text-transform:uppercase;
+  letter-spacing:0.28em;
+  font-size:0.78rem;
+  color:var(--teal);
+  margin:0 0 8px;
+  font-weight:700;
+}
+.panel-title{
+  font-family:'Cinzel Decorative', serif;
+  font-size:clamp(1.5rem, 3.4vw, 2.2rem);
+  margin:0 0 16px;
+  color:var(--gold-bright);
+}
+.flavor-text{
+  color:var(--text-dim);
+  line-height:1.7;
+  max-width:680px;
+  margin:0 auto 24px;
+  font-size:1rem;
+}
+.flavor-text b{ color:var(--text); }
+
+/* ---------- Clue list ---------- */
+.clue-list{
+  list-style:none;
+  margin:0 0 30px;
+  padding:0;
+  display:grid;
+  gap:12px;
+  text-align:left;
+  max-width:640px;
+  margin-left:auto;
+  margin-right:auto;
+}
+.clue-list li{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  border-left:3px solid var(--purple);
+  border-radius:10px;
+  padding:12px 16px;
+  font-size:0.96rem;
+  line-height:1.5;
+  animation:clueIn 0.5s ease both;
+}
+.clue-list li b{ color: var(--gold-bright); }
+.clue-list li .clue-num{
+  color:var(--purple);
+  font-weight:700;
+  margin-right:6px;
+}
+@keyframes clueIn{
+  from{ opacity:0; transform:translateX(-10px); }
+  to{ opacity:1; transform:translateX(0); }
+}
+
+/* ---------- Deduction form ---------- */
+.deduction-form{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:16px;
+  max-width:680px;
+  margin:0 auto 26px;
+}
+@media (max-width: 700px){
+  .deduction-form{ grid-template-columns:1fr; }
+}
+.field{
+  text-align:left;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.field label{
+  font-size:0.82rem;
+  color:var(--text-dim);
+  font-weight:600;
+}
+.field select{
+  font-family:'Quicksand', sans-serif;
+  font-size:0.96rem;
+  padding:12px 14px;
+  border-radius:10px;
+  border:1px solid var(--panel-border);
+  background:rgba(0,0,0,0.35);
+  color:var(--text);
+  cursor:pointer;
+  outline:none;
+  transition:border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.field select:focus{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(244,201,93,0.18);
+}
+
+.feedback{
+  min-height:26px;
+  margin-top:16px;
+  font-weight:700;
+  font-size:0.98rem;
+}
+.feedback.correct{ color:var(--success); }
+.feedback.wrong{ color:var(--danger); animation:shake 0.4s ease; }
+@keyframes shake{
+  10%,90%{ transform:translateX(-3px); }
+  20%,80%{ transform:translateX(5px); }
+  30%,50%,70%{ transform:translateX(-8px); }
+  40%,60%{ transform:translateX(8px); }
+}
+
+/* ---------- Maze ---------- */
+.maze-wrap{
+  display:flex;
+  justify-content:center;
+  margin:0 auto 22px;
+  width:100%;
+}
+#mazeCanvas{
+  background:radial-gradient(circle at 50% 30%, #1c0f3d, #0a0518 85%);
+  border-radius:16px;
+  border:1px solid var(--panel-border);
+  box-shadow:0 0 40px rgba(138,92,246,0.25) inset, 0 12px 40px rgba(0,0,0,0.5);
+  max-width:100%;
+  touch-action:none;
+}
+.maze-controls{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:14px;
+}
+.dpad{
+  display:grid;
+  grid-template-columns:52px 52px 52px;
+  grid-template-rows:52px 52px;
+  gap:6px;
+  grid-template-areas:
+    ".    up    ."
+    "left down right";
+}
+.dpad-up{ grid-area:up; }
+.dpad-left{ grid-area:left; }
+.dpad-right{ grid-area:right; }
+.dpad-down{ grid-area:down; }
+.dpad-btn{
+  font-size:1.1rem;
+  border-radius:12px;
+  border:1px solid var(--panel-border);
+  background:rgba(255,255,255,0.06);
+  color:var(--gold-bright);
+  cursor:pointer;
+  user-select:none;
+  transition:transform 0.12s ease, background 0.15s ease;
+}
+.dpad-btn:active{
+  transform:scale(0.9);
+  background:rgba(244,201,93,0.25);
+}
+
+/* ---------- Celebration ---------- */
+#screen-celebration{ position:relative; }
+#confettiCanvas{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+}
+.celebration-content{
+  position:relative;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.birthday-title{
+  font-family:'Cinzel Decorative', serif;
+  font-size:clamp(1.8rem, 5.4vw, 3.2rem);
+  margin:0 0 10px;
+  background:linear-gradient(90deg, var(--pink), var(--gold-bright), var(--teal), var(--pink));
+  background-size:300% 100%;
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  animation:shimmer 4s linear infinite;
+}
+@keyframes shimmer{
+  0%{ background-position:0% 50%; }
+  100%{ background-position:300% 50%; }
+}
+.gift-reveal{
+  font-size:64px;
+  margin:6px 0 18px;
+  animation:pop 0.6s cubic-bezier(.34,1.56,.64,1) both, wobble 2.6s ease-in-out 0.6s infinite;
+}
+@keyframes pop{
+  from{ transform:scale(0); opacity:0; }
+  to{ transform:scale(1); opacity:1; }
+}
+@keyframes wobble{
+  0%,100%{ transform:rotate(-6deg); }
+  50%{ transform:rotate(6deg); }
+}
+.birthday-message{
+  max-width:600px;
+  font-size:1.08rem;
+  line-height:1.8;
+  color:var(--text);
+  background:var(--panel-bg);
+  border:1px solid var(--panel-border);
+  border-radius:18px;
+  padding:26px 30px;
+  box-shadow:var(--shadow-glow);
+  min-height:60px;
+}
+
+/* ---------- Responsive tweaks ---------- */
+@media (max-width:520px){
+  .panel{ padding:26px 16px; border-radius:16px; }
+  .btn{ padding:14px 28px; font-size:0.98rem; }
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>The Birthday Quest — For Olek</title>
+<meta name="description" content="A mysterious puzzle adventure birthday quest.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎁</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<button id="muteBtn" class="icon-btn" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+
+<div id="app">
+
+  <!-- SCREEN 1: START -->
+  <section id="screen-start" class="screen active">
+    <div class="floating-emblem">🗝️</div>
+    <div class="title-wrap">
+      <p class="eyebrow">A mysterious adventure begins...</p>
+      <h1 class="game-title">THE BIRTHDAY<br>QUEST</h1>
+      <p class="subtitle">Somewhere in this quest, a secret waits for<br><span class="olek-name">OLEK</span>.</p>
+    </div>
+    <button id="startBtn" class="btn btn-primary">
+      <span>Begin the Quest</span>
+    </button>
+    <p class="hint-text">🎂 Solve the mystery. Escape the labyrinth. Find what's hidden.</p>
+  </section>
+
+  <!-- SCREEN 2: PUZZLE -->
+  <section id="screen-puzzle" class="screen">
+    <div class="panel">
+      <p class="chapter-label">Chapter I — The Missing Key</p>
+      <h2 class="panel-title">The Guests Who Stayed</h2>
+      <p class="flavor-text">Long after the cake was cut, four guests lingered at the table: <b>Nina</b>, <b>Kuba</b>, <b>Zosia</b>, and <b>Tomek</b>. One of them slipped away and hid the key to the labyrinth. Read the clues below carefully. Only pure logic will reveal the truth — there is exactly one guilty party.</p>
+
+      <ul id="clueList" class="clue-list"></ul>
+
+      <div class="deduction-form">
+        <div class="field">
+          <label for="selName">Who hid the key?</label>
+          <select id="selName"><option value="">— choose a name —</option></select>
+        </div>
+        <div class="field">
+          <label for="selFlavor">Their favorite cake flavor?</label>
+          <select id="selFlavor"><option value="">— choose a flavor —</option></select>
+        </div>
+        <div class="field">
+          <label for="selSpot">Where did they hide it?</label>
+          <select id="selSpot"><option value="">— choose a hiding spot —</option></select>
+        </div>
+      </div>
+
+      <button id="submitPuzzle" class="btn btn-primary">Make Your Accusation</button>
+      <p id="puzzleFeedback" class="feedback" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: MAZE -->
+  <section id="screen-maze" class="screen">
+    <div class="panel panel-wide">
+      <p class="chapter-label">Chapter II — The Labyrinth</p>
+      <h2 class="panel-title">Find the Way</h2>
+      <p class="flavor-text">The key turns in a hidden lock. A labyrinth unfolds before you — somewhere inside, Olek's gift glows gold. Navigate the winding paths to reach it.</p>
+
+      <div class="maze-wrap">
+        <canvas id="mazeCanvas"></canvas>
+      </div>
+
+      <div class="maze-controls">
+        <div class="dpad" aria-label="Movement controls">
+          <button data-dir="up" class="dpad-btn dpad-up" aria-label="Move up">▲</button>
+          <button data-dir="left" class="dpad-btn dpad-left" aria-label="Move left">◀</button>
+          <button data-dir="right" class="dpad-btn dpad-right" aria-label="Move right">▶</button>
+          <button data-dir="down" class="dpad-btn dpad-down" aria-label="Move down">▼</button>
+        </div>
+        <p class="hint-text">Use <b>WASD</b> / <b>Arrow Keys</b>, or the buttons above on mobile</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 4: CELEBRATION -->
+  <section id="screen-celebration" class="screen">
+    <canvas id="confettiCanvas"></canvas>
+    <div class="celebration-content">
+      <h1 class="birthday-title">🎉 HAPPY BIRTHDAY, OLEK! 🎉</h1>
+      <div class="gift-reveal">🎁</div>
+      <p id="birthdayMessage" class="birthday-message"></p>
+      <button id="replayBtn" class="btn btn-secondary">Play the Quest Again</button>
+    </div>
+  </section>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
