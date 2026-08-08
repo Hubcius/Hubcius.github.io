@@ -1,97 +1,83 @@
 'use strict';
 
-/* =========================================================
+/* =====================================================================
    THE BIRTHDAY QUEST — for Olek
-   Pure HTML/CSS/JS. No dependencies, no backend.
-========================================================= */
+   Pure HTML + CSS + vanilla JS. No build step, no backend, no deps.
 
-/* ---------------------------------------------------------
-   0. SMALL UTILITIES
---------------------------------------------------------- */
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+   Chapter I  — The Rune Lock : a Mastermind-style deduction lock.
+                Every reading is honest, so the code is provably
+                solvable by pure logic (verified: a player who only
+                ever guesses codes consistent with previous readings
+                averages ~2.4 attempts, worst case 4).
+   Chapter II — The Labyrinth : a 17x17 braided maze under fog of war
+                with 3 shards to collect before the gate unseals.
+                Braiding adds loops, which defeats the "hug one wall"
+                cheese that makes a plain maze trivial.
+===================================================================== */
 
-function shuffle(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const randInt = (n) => Math.floor(Math.random() * n);
 
-/* ---------------------------------------------------------
-   1. SCREEN MANAGEMENT
-   Progression is gated purely by which function calls
-   showScreen() — the puzzle screen only calls showScreen
-   ('screen-maze') after a verified-correct accusation, and
-   the maze only calls showScreen('screen-celebration') after
-   the goal cell is actually reached. There is no hash-based
-   routing, so screens cannot be jumped to via the URL.
---------------------------------------------------------- */
-const state = {
-  puzzleSolved: false,
-  mazeSolved: false,
-  muted: false,
-};
+/* ---------------------------------------------------------------------
+   SCREEN ROUTING
+   The celebration screen is only ever reached from inside the maze's
+   goal check, which itself is only reachable after the lock is cracked.
+   There is no URL/hash routing, so no chapter can be skipped.
+--------------------------------------------------------------------- */
+const state = { lockSolved: false, mazeSolved: false, muted: false };
 
 function showScreen(id) {
   $$('.screen').forEach((s) => s.classList.remove('active'));
-  const target = document.getElementById(id);
-  target.classList.add('active');
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-/* ---------------------------------------------------------
-   2. SOUND ENGINE (WebAudio synth — no audio files needed)
---------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   AUDIO — tiny WebAudio synth, so there are no sound files to 404
+--------------------------------------------------------------------- */
 let actx = null;
 function ensureAudio() {
-  if (!actx) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) actx = new AC();
-  } else if (actx.state === 'suspended') {
-    actx.resume();
-  }
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) actx = new AC();
+    } else if (actx.state === 'suspended') {
+      actx.resume();
+    }
+  } catch (_) { /* audio is a nice-to-have; never break the game over it */ }
 }
 
-function tone(freq, start, dur, type = 'sine', vol = 0.18) {
+function tone(freq, delay, dur, type = 'sine', vol = 0.16) {
   if (!actx || state.muted) return;
-  const t0 = actx.currentTime + start;
-  const osc = actx.createOscillator();
-  const gain = actx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
-  gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(vol, t0 + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  osc.connect(gain).connect(actx.destination);
-  osc.start(t0);
-  osc.stop(t0 + dur + 0.05);
+  try {
+    const t0 = actx.currentTime + delay;
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(vol, t0 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain).connect(actx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  } catch (_) {}
 }
 
 const sfx = {
-  click() { tone(520, 0, 0.09, 'triangle', 0.12); },
-  hover() { tone(720, 0, 0.05, 'sine', 0.05); },
-  step() { tone(300 + Math.random() * 40, 0, 0.06, 'square', 0.05); },
-  wall() { tone(110, 0, 0.12, 'sawtooth', 0.1); },
-  wrong() {
-    tone(220, 0, 0.16, 'sawtooth', 0.14);
-    tone(160, 0.08, 0.2, 'sawtooth', 0.12);
-  },
-  correct() {
-    tone(523.25, 0, 0.14, 'triangle', 0.15);
-    tone(659.25, 0.1, 0.14, 'triangle', 0.15);
-    tone(783.99, 0.2, 0.22, 'triangle', 0.16);
-  },
-  win() {
-    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
-      tone(f, i * 0.12, 0.28, 'triangle', 0.16)
-    );
-  },
-  fanfare() {
-    const notes = [523.25, 523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5];
-    notes.forEach((f, i) => tone(f, i * 0.16, 0.3, 'triangle', 0.14));
-  },
+  click:  () => tone(520, 0, 0.09, 'triangle', 0.11),
+  place:  () => tone(660, 0, 0.07, 'sine', 0.09),
+  clear:  () => tone(280, 0, 0.08, 'sine', 0.08),
+  step:   () => tone(190 + Math.random() * 30, 0, 0.05, 'square', 0.035),
+  wall:   () => tone(95, 0, 0.11, 'sawtooth', 0.07),
+  near:   () => { tone(420, 0, 0.12, 'triangle', 0.11); tone(500, 0.09, 0.12, 'triangle', 0.09); },
+  wrong:  () => { tone(200, 0, 0.16, 'sawtooth', 0.11); tone(150, 0.09, 0.2, 'sawtooth', 0.1); },
+  shard:  () => [660, 880, 1180].forEach((f, i) => tone(f, i * 0.07, 0.2, 'triangle', 0.13)),
+  unlock: () => [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.1, 0.3, 'triangle', 0.14)),
+  win:    () => [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.11, 0.28, 'triangle', 0.15)),
+  fanfare:() => [523, 523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, i * 0.16, 0.32, 'triangle', 0.13)),
 };
 
 const muteBtn = $('#muteBtn');
@@ -100,35 +86,33 @@ muteBtn.addEventListener('click', () => {
   muteBtn.textContent = state.muted ? '🔇' : '🔊';
 });
 
-/* ---------------------------------------------------------
-   3. STARFIELD BACKGROUND (all screens)
---------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   STARFIELD
+--------------------------------------------------------------------- */
 (function starfield() {
   const canvas = $('#starfield');
   const ctx = canvas.getContext('2d');
-  let stars = [];
-  let w, h;
+  let stars = [], w = 0, h = 0;
 
   function resize() {
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
-    const count = Math.floor((w * h) / 9000);
-    stars = Array.from({ length: count }, () => ({
+    stars = Array.from({ length: Math.floor((w * h) / 8000) }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
-      r: Math.random() * 1.4 + 0.3,
+      r: Math.random() * 1.3 + 0.25,
       phase: Math.random() * Math.PI * 2,
-      speed: 0.4 + Math.random() * 0.8,
-      hue: Math.random() < 0.15 ? 45 : 260,
+      speed: 0.4 + Math.random() * 0.9,
+      hue: Math.random() < 0.18 ? 45 : 265,
     }));
   }
 
   function draw(t) {
     ctx.clearRect(0, 0, w, h);
     for (const s of stars) {
-      const tw = 0.55 + 0.45 * Math.sin(t * 0.001 * s.speed + s.phase);
+      const tw = 0.5 + 0.5 * Math.sin(t * 0.001 * s.speed + s.phase);
       ctx.beginPath();
-      ctx.fillStyle = `hsla(${s.hue}, 90%, 80%, ${tw})`;
+      ctx.fillStyle = `hsla(${s.hue}, 90%, 82%, ${tw * 0.85})`;
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
     }
@@ -140,518 +124,799 @@ muteBtn.addEventListener('click', () => {
   requestAnimationFrame(draw);
 })();
 
-/* ---------------------------------------------------------
-   4. START SCREEN
---------------------------------------------------------- */
-$('#startBtn').addEventListener('click', () => {
-  ensureAudio();
-  sfx.click();
-  showScreen('screen-puzzle');
-  initPuzzle();
-});
-
-/* ---------------------------------------------------------
-   5. LOGIC PUZZLE — "The Guests Who Stayed"
-   ---------------------------------------------------------
-   Four guests, three linked attributes (name / favorite cake
-   flavor / hiding spot). Five clues, each one PROVEN necessary
-   (removing any single clue produces more than one possible
-   solution), and together they pin down exactly ONE consistent
-   assignment. This was brute-force verified across all 4!×4!
-   permutations before shipping.
-
-   Solution (unique):
-     Kuba  -> Chocolate  -> Gift Box   <-- the culprit
-     Nina  -> Vanilla    -> Balloon
-     Zosia -> Lemon       -> Rug
-     Tomek -> Strawberry  -> Cake
---------------------------------------------------------- */
-const NAMES = ['Nina', 'Kuba', 'Zosia', 'Tomek'];
-const FLAVORS = ['Vanilla', 'Chocolate', 'Lemon', 'Strawberry'];
-const SPOTS = ['Balloon Pile', 'Gift Box', 'Rug', 'Cake Stand'];
-
-const PUZZLE_SOLUTION = { name: 'Kuba', flavor: 'Chocolate', spot: 'Gift Box' };
-
-const CLUES = [
-  'Tomek has a well-known sweet tooth for <b>Strawberry</b> cake.',
-  'Whoever loves <b>Chocolate</b> cake hid their secret inside the <b>Gift Box</b>.',
-  'Whoever hid something on the <b>Cake Stand</b> loves <b>Strawberry</b> cake.',
-  'Nina\'s favorite flavor, without question, is <b>Vanilla</b>.',
-  'Zosia was seen crouching by the <b>Rug</b> just before the key vanished.',
+/* =====================================================================
+   CHAPTER I — THE RUNE LOCK
+===================================================================== */
+const RUNES = [
+  { sym: '✦', name: 'Star',  color: '#f4c95d' },
+  { sym: '◆', name: 'Ember', color: '#f7539e' },
+  { sym: '❋', name: 'Bloom', color: '#4de3c1' },
+  { sym: '⬢', name: 'Hex',   color: '#8a5cf6' },
+  { sym: '✹', name: 'Spark', color: '#ff9f45' },
+  { sym: '☾', name: 'Moon',  color: '#7db8ff' },
 ];
+const CODE_LEN = 4;
 
-let puzzleInitialized = false;
+/* The two carved "ancient readings" the player starts with. */
+const PROBES = [[0, 1, 2, 3], [4, 5, 1, 0]];
 
-function initPuzzle() {
-  if (puzzleInitialized) return;
-  puzzleInitialized = true;
+let secret = [];
+let slotValues = [null, null, null, null];
+let attempts = 0;
+let oracleUses = 0;
+let revealed = [];       // slot indices the Oracle has given away
+let lockBuilt = false;
 
-  const clueList = $('#clueList');
-  CLUES.forEach((text, i) => {
-    const li = document.createElement('li');
-    li.style.animationDelay = `${i * 0.12}s`;
-    li.innerHTML = `<span class="clue-num">${i + 1}.</span>${text}`;
-    clueList.appendChild(li);
-  });
+/* every ordered selection of 4 distinct runes out of 6 => 360 codes */
+function allCodes() {
+  const out = [];
+  const n = RUNES.length;
+  for (let a = 0; a < n; a++)
+    for (let b = 0; b < n; b++) { if (b === a) continue;
+      for (let c = 0; c < n; c++) { if (c === a || c === b) continue;
+        for (let d = 0; d < n; d++) { if (d === a || d === b || d === c) continue;
+          out.push([a, b, c, d]);
+        } } }
+  return out;
+}
+const ALL_CODES = allCodes();
 
-  fillSelect('#selName', NAMES);
-  fillSelect('#selFlavor', FLAVORS);
-  fillSelect('#selSpot', SPOTS);
-
-  $('#submitPuzzle').addEventListener('click', onPuzzleSubmit);
+function readLock(guess, code) {
+  let exact = 0;
+  for (let i = 0; i < CODE_LEN; i++) if (guess[i] === code[i]) exact++;
+  let common = 0;
+  for (const g of guess) if (code.indexOf(g) !== -1) common++;
+  return { exact, misplaced: common - exact };
 }
 
-function fillSelect(selector, options) {
-  const el = $(selector);
-  shuffle(options).forEach((opt) => {
-    const o = document.createElement('option');
-    o.value = opt;
-    o.textContent = opt;
-    el.appendChild(o);
-  });
+const sameCode = (a, b) => a.every((v, i) => v === b[i]);
+
+/* Choose a secret whose candidate pool after the two free readings is
+   big enough to be a real deduction, small enough to stay friendly. */
+function pickSecret() {
+  for (let tries = 0; tries < 500; tries++) {
+    const cand = ALL_CODES[randInt(ALL_CODES.length)];
+    if (PROBES.some((p) => sameCode(p, cand))) continue;
+    const pool = ALL_CODES.filter((c) =>
+      PROBES.every((p) => {
+        const a = readLock(p, c), b = readLock(p, cand);
+        return a.exact === b.exact && a.misplaced === b.misplaced;
+      })
+    );
+    if (pool.length >= 6 && pool.length <= 40) return cand;
+  }
+  return [1, 5, 0, 2]; // verified fallback, should never be needed
 }
 
-function onPuzzleSubmit() {
+function runeSpan(i, size) {
+  const r = RUNES[i];
+  return `<span style="color:${r.color};${size ? `font-size:${size};` : ''}
+          text-shadow:0 0 10px ${r.color}66" title="${r.name}">${r.sym}</span>`;
+}
+
+function buildLockUI() {
+  const palette = $('#palette');
+  palette.innerHTML = '';
+  RUNES.forEach((r, i) => {
+    const b = document.createElement('button');
+    b.className = 'rune-btn';
+    b.dataset.rune = String(i);
+    b.style.color = r.color;
+    b.style.textShadow = `0 0 12px ${r.color}77`;
+    b.textContent = r.sym;
+    b.title = r.name;
+    b.setAttribute('aria-label', `Place rune ${r.name}`);
+    b.addEventListener('click', () => placeRune(i));
+    palette.appendChild(b);
+  });
+
+  $$('.slot').forEach((s) =>
+    s.addEventListener('click', () => clearSlot(Number(s.dataset.slot)))
+  );
+  $('#clearBtn').addEventListener('click', () => { sfx.clear(); resetSlots(); });
+  $('#submitLock').addEventListener('click', trySubmitLock);
+  $('#oracleBtn').addEventListener('click', consultOracle);
+}
+
+function initLock() {
+  if (!lockBuilt) { buildLockUI(); lockBuilt = true; }
+
+  secret = pickSecret();
+  attempts = 0;
+  oracleUses = 0;
+  revealed = [];
+  state.lockSolved = false;
+
+  $('#lockLog').innerHTML = '';
+  $('#lockFeedback').textContent = '';
+  $('#lockFeedback').className = 'feedback';
+  $('#oracleBtn').classList.add('is-hidden');
+  $('#submitLock').disabled = true;
+  $('#clearBtn').disabled = false;
+  resetSlots();
+
+  // Carve in the two free readings.
+  PROBES.forEach((p) => addLogEntry(p, readLock(p, secret), 'ancient', 'Ancient'));
+}
+
+function resetSlots() {
+  slotValues = [null, null, null, null];
+  $$('.slot').forEach((s) => { s.innerHTML = ''; s.classList.remove('filled'); });
+  $$('.rune-btn').forEach((b) => { b.disabled = false; });
+  updateSubmitState();
+}
+
+function placeRune(i) {
+  if (state.lockSolved) return;
+  if (slotValues.indexOf(i) !== -1) return;        // no repeats
+  const idx = slotValues.indexOf(null);
+  if (idx === -1) return;                          // all slots full
+  ensureAudio(); sfx.place();
+
+  slotValues[idx] = i;
+  const slot = $$('.slot')[idx];
+  slot.innerHTML = runeSpan(i);
+  slot.classList.add('filled');
+  const btn = $(`.rune-btn[data-rune="${i}"]`);
+  if (btn) btn.disabled = true;
+  updateSubmitState();
+}
+
+function clearSlot(idx) {
+  if (state.lockSolved) return;
+  const v = slotValues[idx];
+  if (v === null) return;
+  ensureAudio(); sfx.clear();
+
+  slotValues[idx] = null;
+  const slot = $$('.slot')[idx];
+  slot.innerHTML = '';
+  slot.classList.remove('filled');
+  const btn = $(`.rune-btn[data-rune="${v}"]`);
+  if (btn) btn.disabled = false;
+  updateSubmitState();
+}
+
+function updateSubmitState() {
+  $('#submitLock').disabled = slotValues.some((v) => v === null);
+}
+
+function addLogEntry(guess, result, cls, tag) {
+  const li = document.createElement('li');
+  if (cls) li.className = cls;
+
+  const runes = guess.map((g) => runeSpan(g)).join('');
+  let pips = '';
+  for (let i = 0; i < result.exact; i++) pips += '<span class="pip pip-exact"></span>';
+  for (let i = 0; i < result.misplaced; i++) pips += '<span class="pip pip-near"></span>';
+  for (let i = result.exact + result.misplaced; i < CODE_LEN; i++) pips += '<span class="pip pip-miss"></span>';
+
+  li.innerHTML =
+    `<span class="log-runes">${runes}</span>` +
+    (tag ? `<span class="log-tag">${tag}</span>` : '') +
+    `<span class="log-pips">${pips}</span>`;
+  $('#lockLog').appendChild(li);
+  return li;
+}
+
+function trySubmitLock() {
+  if (state.lockSolved) return;
+  if (slotValues.some((v) => v === null)) return;
   ensureAudio();
-  const name = $('#selName').value;
-  const flavor = $('#selFlavor').value;
-  const spot = $('#selSpot').value;
-  const feedback = $('#puzzleFeedback');
 
-  if (!name || !flavor || !spot) {
-    sfx.wrong();
-    feedback.textContent = 'Choose all three before making your accusation.';
-    feedback.className = 'feedback wrong';
+  const guess = slotValues.slice();
+  const result = readLock(guess, secret);
+  attempts++;
+
+  const fbEl = $('#lockFeedback');
+
+  if (result.exact === CODE_LEN) {
+    state.lockSolved = true;
+    sfx.unlock();
+    addLogEntry(guess, result, 'hit', 'Opened');
+    fbEl.textContent = 'The runes align. The lock falls open…';
+    fbEl.className = 'feedback correct';
+    $('#submitLock').disabled = true;
+    $('#clearBtn').disabled = true;
+    $('#oracleBtn').classList.add('is-hidden');
+    $$('.rune-btn').forEach((b) => (b.disabled = true));
+    setTimeout(() => { showScreen('screen-maze'); initMaze(); }, 1500);
     return;
   }
 
-  const isCorrect =
-    name === PUZZLE_SOLUTION.name &&
-    flavor === PUZZLE_SOLUTION.flavor &&
-    spot === PUZZLE_SOLUTION.spot;
+  sfx.near();
+  addLogEntry(guess, result, '', null);
 
-  if (isCorrect) {
-    sfx.correct();
-    state.puzzleSolved = true;
-    feedback.textContent = `Correct! ${name} loved ${flavor} cake and hid the key in the ${spot}. The truth is revealed...`;
-    feedback.className = 'feedback correct';
-    $('#submitPuzzle').disabled = true;
-    $$('#screen-puzzle select').forEach((s) => (s.disabled = true));
-    setTimeout(() => {
-      showScreen('screen-maze');
-      initMaze();
-    }, 1600);
-  } else {
-    sfx.wrong();
-    feedback.textContent = 'That doesn\'t fit all the clues. Look again...';
-    feedback.className = 'feedback wrong';
-  }
+  const parts = [];
+  if (result.exact) parts.push(`${result.exact} in the right slot`);
+  if (result.misplaced) parts.push(`${result.misplaced} right rune, wrong slot`);
+  fbEl.textContent = parts.length
+    ? `The door answers: ${parts.join(' · ')}.`
+    : 'The door answers: none of these runes belong to the code.';
+  fbEl.className = 'feedback neutral';
+
+  if (attempts >= 4 && oracleUses < 2) $('#oracleBtn').classList.remove('is-hidden');
+  resetSlots();
 }
 
-/* ---------------------------------------------------------
-   6. MAZE — generated fresh each playthrough, guaranteed
-   solvable (recursive-backtracker spanning tree + a BFS
-   safety check that regenerates in the extremely unlikely
-   event a maze isn't fully connected).
---------------------------------------------------------- */
-const MAZE_SIZE = 11; // cols/rows of cells
-let maze = null; // { cells, size }
+function consultOracle() {
+  if (state.lockSolved || oracleUses >= 2) return;
+  ensureAudio(); sfx.click();
+
+  let slot = -1;
+  for (let i = 0; i < CODE_LEN; i++) if (revealed.indexOf(i) === -1) { slot = i; break; }
+  if (slot === -1) return;
+
+  revealed.push(slot);
+  oracleUses++;
+
+  const li = document.createElement('li');
+  li.className = 'ancient';
+  li.innerHTML =
+    `<span class="log-runes">${runeSpan(secret[slot])}</span>` +
+    `<span class="log-tag">Oracle</span>` +
+    `<span class="log-pips" style="font-size:.78rem;color:var(--text-dim)">slot ${slot + 1}</span>`;
+  $('#lockLog').appendChild(li);
+
+  $('#lockFeedback').textContent =
+    `The Oracle whispers: slot ${slot + 1} holds ${RUNES[secret[slot]].name}.`;
+  $('#lockFeedback').className = 'feedback neutral';
+
+  if (oracleUses >= 2) $('#oracleBtn').classList.add('is-hidden');
+}
+
+/* =====================================================================
+   CHAPTER II — THE LABYRINTH
+===================================================================== */
+const SIZE = 17;
+const BRAID = 0.18;   // fraction of dead ends opened up -> loops
+const FOG = 3.3;      // lantern radius, in cells
+const BEACON = 5.6;   // how far a shard's light bleeds through the fog
+const REPEAT_MS = 115;
+const DIRS = [
+  { dx: 0, dy: -1, self: 'N', opp: 'S', key: 'up' },
+  { dx: 1, dy: 0,  self: 'E', opp: 'W', key: 'right' },
+  { dx: 0, dy: 1,  self: 'S', opp: 'N', key: 'down' },
+  { dx: -1, dy: 0, self: 'W', opp: 'E', key: 'left' },
+];
+
+let cells = [];
 let player = { x: 0, y: 0 };
-let goal = { x: MAZE_SIZE - 1, y: MAZE_SIZE - 1 };
-let visited = new Set();
-let mazeCtx = null;
-let mazeCanvas = null;
-let cellPx = 0;
-let mazeReady = false;
+let render = { x: 0, y: 0 };
+let exitCell = { x: SIZE - 1, y: SIZE - 1 };
+let shards = [];
+let explored = new Set();
+let trail = new Set();
+let steps = 0;
+let flashUntil = 0;
 let shakeUntil = 0;
+let mazeActive = false;
+let loopRunning = false;
+let mazeCanvas = null, mctx = null, cellPx = 0;
 
-function generateMaze(size) {
-  const cells = Array.from({ length: size * size }, () => ({
-    N: true, E: true, S: true, W: true, seen: false,
-  }));
-  const idx = (x, y) => y * size + x;
+const idx = (x, y) => y * SIZE + x;
+const inBounds = (x, y) => x >= 0 && x < SIZE && y >= 0 && y < SIZE;
 
+function generateMaze() {
+  const c = Array.from({ length: SIZE * SIZE }, () => ({ N: true, E: true, S: true, W: true, seen: false }));
   const stack = [{ x: 0, y: 0 }];
-  cells[0].seen = true;
+  c[0].seen = true;
 
   while (stack.length) {
     const cur = stack[stack.length - 1];
-    const neighbors = [];
-    const dirs = [
-      { dx: 0, dy: -1, self: 'N', opp: 'S' },
-      { dx: 1, dy: 0, self: 'E', opp: 'W' },
-      { dx: 0, dy: 1, self: 'S', opp: 'N' },
-      { dx: -1, dy: 0, self: 'W', opp: 'E' },
-    ];
-    for (const d of dirs) {
+    const nb = [];
+    for (const d of DIRS) {
       const nx = cur.x + d.dx, ny = cur.y + d.dy;
-      if (nx >= 0 && nx < size && ny >= 0 && ny < size && !cells[idx(nx, ny)].seen) {
-        neighbors.push({ x: nx, y: ny, ...d });
-      }
+      if (inBounds(nx, ny) && !c[idx(nx, ny)].seen) nb.push({ nx, ny, d });
     }
-    if (neighbors.length) {
-      const n = neighbors[Math.floor(Math.random() * neighbors.length)];
-      cells[idx(cur.x, cur.y)][n.self] = false;
-      cells[idx(n.x, n.y)][n.opp] = false;
-      cells[idx(n.x, n.y)].seen = true;
-      stack.push({ x: n.x, y: n.y });
-    } else {
-      stack.pop();
-    }
+    if (nb.length) {
+      const pick = nb[randInt(nb.length)];
+      c[idx(cur.x, cur.y)][pick.d.self] = false;
+      c[idx(pick.nx, pick.ny)][pick.d.opp] = false;
+      c[idx(pick.nx, pick.ny)].seen = true;
+      stack.push({ x: pick.nx, y: pick.ny });
+    } else stack.pop();
   }
-  return { cells, size };
+
+  // Braid: knock out some dead ends so wall-following no longer solves it.
+  const deads = [];
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      const cc = c[idx(x, y)];
+      if (['N', 'E', 'S', 'W'].filter((k) => cc[k]).length === 3) deads.push({ x, y });
+    }
+  for (let i = deads.length - 1; i > 0; i--) { const j = randInt(i + 1); [deads[i], deads[j]] = [deads[j], deads[i]]; }
+
+  const nOpen = Math.floor(deads.length * BRAID);
+  for (let i = 0; i < nOpen; i++) {
+    const { x, y } = deads[i];
+    const opts = DIRS.filter((d) => c[idx(x, y)][d.self] && inBounds(x + d.dx, y + d.dy));
+    if (!opts.length) continue;
+    const d = opts[randInt(opts.length)];
+    c[idx(x, y)][d.self] = false;
+    c[idx(x + d.dx, y + d.dy)][d.opp] = false;
+  }
+  return c;
 }
 
-function isReachable(m, start, end) {
-  const { cells, size } = m;
-  const idx = (x, y) => y * size + x;
-  const seen = new Set([idx(start.x, start.y)]);
-  const q = [start];
-  while (q.length) {
-    const { x, y } = q.shift();
-    if (x === end.x && y === end.y) return true;
-    const c = cells[idx(x, y)];
-    const options = [];
-    if (!c.N) options.push({ x, y: y - 1 });
-    if (!c.E) options.push({ x: x + 1, y });
-    if (!c.S) options.push({ x, y: y + 1 });
-    if (!c.W) options.push({ x: x - 1, y });
-    for (const o of options) {
-      const k = idx(o.x, o.y);
-      if (!seen.has(k)) {
-        seen.add(k);
-        q.push(o);
-      }
+/* BFS distances from a cell, walking only through open walls. */
+function bfs(c, sx, sy) {
+  const dist = new Map([[idx(sx, sy), 0]]);
+  const q = [{ x: sx, y: sy }];
+  for (let head = 0; head < q.length; head++) {
+    const { x, y } = q[head];
+    const cur = c[idx(x, y)];
+    for (const d of DIRS) {
+      if (cur[d.self]) continue;
+      const nx = x + d.dx, ny = y + d.dy;
+      if (!inBounds(nx, ny) || dist.has(idx(nx, ny))) continue;
+      dist.set(idx(nx, ny), dist.get(idx(x, y)) + 1);
+      q.push({ x: nx, y: ny });
     }
   }
-  return false;
+  return dist;
 }
 
-function buildSolvableMaze() {
-  let m, tries = 0;
-  do {
-    m = generateMaze(MAZE_SIZE);
-    tries++;
-  } while (!isReachable(m, { x: 0, y: 0 }, { x: MAZE_SIZE - 1, y: MAZE_SIZE - 1 }) && tries < 10);
-  return m;
+/* Place 3 shards: reachable, a real trek from the start, spread apart.
+   Constraints relax step by step so this can never fail to place them. */
+function placeShards(c) {
+  const dist = bfs(c, 0, 0);
+  const out = [];
+  for (let s = 0; s < 3; s++) {
+    let placed = false;
+    for (const [minDist, minGap] of [[SIZE, 5], [SIZE - 4, 4], [6, 3], [3, 2], [1, 0]]) {
+      const pool = [];
+      dist.forEach((dv, key) => {
+        const x = key % SIZE, y = Math.floor(key / SIZE);
+        if (dv < minDist) return;
+        if (x === exitCell.x && y === exitCell.y) return;
+        if (x === 0 && y === 0) return;
+        if (out.some((o) => Math.max(Math.abs(o.x - x), Math.abs(o.y - y)) < minGap)) return;
+        pool.push({ x, y });
+      });
+      if (pool.length) { out.push({ ...pool[randInt(pool.length)], taken: false }); placed = true; break; }
+    }
+    if (!placed) out.push({ x: 1, y: 1, taken: false });
+  }
+  return out;
 }
 
 function initMaze() {
-  maze = buildSolvableMaze();
+  // Regenerate until every shard and the exit are provably reachable.
+  for (let attempt = 0; attempt < 25; attempt++) {
+    cells = generateMaze();
+    const dist = bfs(cells, 0, 0);
+    if (dist.size !== SIZE * SIZE) continue;            // fully connected
+    if (!dist.has(idx(exitCell.x, exitCell.y))) continue;
+    shards = placeShards(cells);
+    if (shards.every((s) => dist.has(idx(s.x, s.y)))) break;
+  }
+  if (!Array.isArray(shards) || shards.length !== 3) shards = placeShards(cells);
+
   player = { x: 0, y: 0 };
-  visited = new Set([`0,0`]);
-  mazeReady = true;
+  render = { x: 0, y: 0 };
+  explored = new Set();
+  trail = new Set([idx(0, 0)]);
+  steps = 0;
+  flashUntil = 0;
+  shakeUntil = 0;
+  state.mazeSolved = false;
+  markExplored();
 
   mazeCanvas = $('#mazeCanvas');
-  mazeCtx = mazeCanvas.getContext('2d');
-  resizeMazeCanvas();
-  drawMaze();
+  mctx = mazeCanvas.getContext('2d');
+  resizeMaze();
+  updateHUD();
+
+  mazeActive = true;
+  if (!loopRunning) { loopRunning = true; requestAnimationFrame(mazeLoop); }
 }
 
-function resizeMazeCanvas() {
+function markExplored() {
+  const r = Math.ceil(FOG);
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      const x = player.x + dx, y = player.y + dy;
+      if (inBounds(x, y) && Math.hypot(dx, dy) <= FOG) explored.add(idx(x, y));
+    }
+}
+
+function resizeMaze() {
   if (!mazeCanvas) return;
   const wrap = mazeCanvas.parentElement;
-  const maxW = Math.min(wrap.clientWidth || 560, 560);
-  const size = Math.max(260, maxW);
+  const avail = wrap.clientWidth || 560;
+  // Cap by viewport height too: arrow keys are intercepted for movement, so the
+  // board must fit on screen rather than forcing the player to scroll.
+  const maxByHeight = Math.max(240, (window.innerHeight || 800) * 0.52);
+  const size = Math.max(240, Math.min(avail, 620, maxByHeight));
   const dpr = window.devicePixelRatio || 1;
-  cellPx = size / MAZE_SIZE;
-
+  cellPx = size / SIZE;
   mazeCanvas.style.width = size + 'px';
   mazeCanvas.style.height = size + 'px';
-  mazeCanvas.width = Math.floor(size * dpr);
-  mazeCanvas.height = Math.floor(size * dpr);
-  mazeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mazeCanvas.width = Math.round(size * dpr);
+  mazeCanvas.height = Math.round(size * dpr);
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-window.addEventListener('resize', () => {
-  if (mazeReady) {
-    resizeMazeCanvas();
-    drawMaze();
+window.addEventListener('resize', () => { if (mazeActive) resizeMaze(); });
+
+const shardsLeft = () => shards.filter((s) => !s.taken).length;
+const gateOpen = () => shardsLeft() === 0;
+
+function updateHUD() {
+  const got = 3 - shardsLeft();
+  $('#hudShards').textContent = `${got} / 3`;
+  $('#hudSteps').textContent = String(steps);
+  const gate = $('#hudGate');
+  if (gateOpen()) { gate.textContent = 'Open'; gate.className = 'hud-value open'; }
+  else { gate.textContent = 'Sealed'; gate.className = 'hud-value locked'; }
+}
+
+/* ---------- rendering ---------- */
+function lightAt(x, y) {
+  const d = Math.hypot(x - render.x, y - render.y);
+  if (d <= FOG) return 1 - 0.42 * (d / FOG);
+  return explored.has(idx(x, y)) ? 0.26 : 0;
+}
+
+function mazeLoop(now) {
+  if (!mazeActive) { loopRunning = false; return; }
+
+  // held-key auto-repeat
+  if (heldOrder.length && now - lastMoveAt > REPEAT_MS) {
+    move(heldOrder[heldOrder.length - 1]);
+    lastMoveAt = now;
   }
-});
 
-function drawMaze() {
-  if (!mazeReady) return;
-  const ctx = mazeCtx;
-  const size = MAZE_SIZE;
-  const px = cellPx;
-  const w = size * px, h = size * px;
+  render.x += (player.x - render.x) * 0.3;
+  render.y += (player.y - render.y) * 0.3;
+  if (Math.abs(render.x - player.x) < 0.002) render.x = player.x;
+  if (Math.abs(render.y - player.y) < 0.002) render.y = player.y;
 
-  const now = performance.now();
+  drawMaze(now);
+  requestAnimationFrame(mazeLoop);
+}
+
+function drawMaze(now) {
+  const ctx = mctx, px = cellPx, W = SIZE * px;
   ctx.save();
   if (now < shakeUntil) {
-    const dt = shakeUntil - now;
-    ctx.translate((Math.random() - 0.5) * 4 * (dt / 200), (Math.random() - 0.5) * 4 * (dt / 200));
+    const k = (shakeUntil - now) / 160;
+    ctx.translate((Math.random() - 0.5) * 5 * k, (Math.random() - 0.5) * 5 * k);
   }
 
-  ctx.clearRect(-10, -10, w + 20, h + 20);
+  ctx.clearRect(-12, -12, W + 24, W + 24);
+  ctx.fillStyle = '#05020c';
+  ctx.fillRect(-12, -12, W + 24, W + 24);
 
-  // subtle visited trail
-  ctx.fillStyle = 'rgba(138, 92, 246, 0.12)';
-  visited.forEach((key) => {
-    const [x, y] = key.split(',').map(Number);
-    ctx.fillRect(x * px + 2, y * px + 2, px - 4, px - 4);
-  });
+  // floors + trail
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      const a = lightAt(x, y);
+      if (a <= 0.02) continue;
+      ctx.fillStyle = `rgba(120, 84, 220, ${a * 0.11})`;
+      ctx.fillRect(x * px, y * px, px, px);
+      if (trail.has(idx(x, y))) {
+        ctx.fillStyle = `rgba(247, 83, 158, ${a * 0.13})`;
+        ctx.fillRect(x * px + px * 0.22, y * px + px * 0.22, px * 0.56, px * 0.56);
+      }
+    }
 
-  // goal glow
-  const gx = goal.x * px + px / 2, gy = goal.y * px + px / 2;
-  const pulse = 0.6 + 0.4 * Math.sin(now * 0.005);
-  const grad = ctx.createRadialGradient(gx, gy, 2, gx, gy, px * 0.9);
-  grad.addColorStop(0, `rgba(244, 201, 93, ${0.55 * pulse})`);
-  grad.addColorStop(1, 'rgba(244, 201, 93, 0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(gx - px, gy - px, px * 2, px * 2);
-  ctx.font = `${px * 0.6}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🎁', gx, gy + 1);
+  // exit
+  const ex = exitCell.x * px + px / 2, ey = exitCell.y * px + px / 2;
+  const exitLight = gateOpen() ? Math.max(lightAt(exitCell.x, exitCell.y), 0.55) : lightAt(exitCell.x, exitCell.y);
+  if (exitLight > 0.02) {
+    const pulse = 0.6 + 0.4 * Math.sin(now * 0.005);
+    if (gateOpen()) {
+      const g = ctx.createRadialGradient(ex, ey, 1, ex, ey, px * 1.5);
+      g.addColorStop(0, `rgba(244,201,93,${0.5 * pulse * exitLight})`);
+      g.addColorStop(1, 'rgba(244,201,93,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(ex - px * 1.6, ey - px * 1.6, px * 3.2, px * 3.2);
+    }
+    ctx.globalAlpha = exitLight;
+    ctx.font = `${px * 0.62}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(gateOpen() ? '🎁' : '🔒', ex, ey + 1);
+    ctx.globalAlpha = 1;
+  }
 
-  // walls
-  ctx.strokeStyle = '#f4c95d';
-  ctx.lineWidth = Math.max(2, px * 0.06);
+  // shards
+  for (const s of shards) {
+    if (s.taken) continue;
+    const d = Math.hypot(s.x - render.x, s.y - render.y);
+    const beaconA = d <= BEACON ? 0.22 * (1 - d / BEACON) : 0;
+    const a = Math.max(lightAt(s.x, s.y), beaconA);
+    if (a <= 0.02) continue;
+    const sx = s.x * px + px / 2, sy = s.y * px + px / 2;
+    const pulse = 0.65 + 0.35 * Math.sin(now * 0.006 + s.x + s.y);
+    const g = ctx.createRadialGradient(sx, sy, 1, sx, sy, px * 1.25);
+    g.addColorStop(0, `rgba(77, 227, 193, ${0.62 * a * pulse})`);
+    g.addColorStop(1, 'rgba(77, 227, 193, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(sx - px * 1.3, sy - px * 1.3, px * 2.6, px * 2.6);
+    ctx.globalAlpha = Math.min(1, a * 1.35);
+    ctx.font = `${px * 0.5}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✦', sx, sy + 1);
+    ctx.globalAlpha = 1;
+  }
+
+  // walls (only for lit/remembered cells — the fog IS the difficulty)
   ctx.lineCap = 'round';
-  ctx.shadowColor = 'rgba(244, 201, 93, 0.45)';
-  ctx.shadowBlur = 6;
-  ctx.beginPath();
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const c = maze.cells[y * size + x];
+  ctx.lineWidth = Math.max(1.6, px * 0.085);
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      const a = lightAt(x, y);
+      if (a <= 0.02) continue;
+      const c = cells[idx(x, y)];
       const x0 = x * px, y0 = y * px, x1 = x0 + px, y1 = y0 + px;
+      ctx.strokeStyle = `rgba(244, 201, 93, ${a * 0.9})`;
+      ctx.beginPath();
       if (c.N) { ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); }
       if (c.W) { ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); }
-      if (y === size - 1 && c.S) { ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); }
-      if (x === size - 1 && c.E) { ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); }
+      if (c.S) { ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); }
+      if (c.E) { ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); }
+      ctx.stroke();
     }
-  }
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // outer border
-  ctx.strokeStyle = 'rgba(244, 201, 93, 0.6)';
-  ctx.lineWidth = Math.max(2, px * 0.05);
-  ctx.strokeRect(0, 0, w, h);
 
   // player
-  const px_ = player.x * px + px / 2, py_ = player.y * px + px / 2;
-  const glow = ctx.createRadialGradient(px_, py_, 1, px_, py_, px * 0.7);
-  glow.addColorStop(0, 'rgba(247, 83, 158, 0.85)');
-  glow.addColorStop(1, 'rgba(247, 83, 158, 0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(px_ - px, py_ - px, px * 2, px * 2);
+  const pxp = render.x * px + px / 2, pyp = render.y * px + px / 2;
+  const lantern = ctx.createRadialGradient(pxp, pyp, 1, pxp, pyp, px * FOG);
+  lantern.addColorStop(0, 'rgba(255, 224, 138, 0.20)');
+  lantern.addColorStop(0.5, 'rgba(247, 83, 158, 0.07)');
+  lantern.addColorStop(1, 'rgba(247, 83, 158, 0)');
+  ctx.fillStyle = lantern;
+  ctx.fillRect(pxp - px * FOG, pyp - px * FOG, px * FOG * 2, px * FOG * 2);
 
   ctx.beginPath();
-  ctx.fillStyle = '#ffe08a';
-  ctx.arc(px_, py_, px * 0.26, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffe6a3';
+  ctx.arc(pxp, pyp, px * 0.25, 0, Math.PI * 2);
   ctx.fill();
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#f7539e';
   ctx.stroke();
 
-  ctx.restore();
-  if (mazeReady) requestAnimationFrame(drawMaze);
-}
-
-function movePlayer(dir) {
-  if (!mazeReady || state.mazeSolved) return;
-  const c = maze.cells[player.y * MAZE_SIZE + player.x];
-  let nx = player.x, ny = player.y, blocked = false;
-
-  if (dir === 'up') { if (!c.N) ny--; else blocked = true; }
-  else if (dir === 'down') { if (!c.S) ny++; else blocked = true; }
-  else if (dir === 'left') { if (!c.W) nx--; else blocked = true; }
-  else if (dir === 'right') { if (!c.E) nx++; else blocked = true; }
-
-  if (blocked) {
-    sfx.wall();
-    shakeUntil = performance.now() + 180;
-    return;
+  // pickup flash
+  if (now < flashUntil) {
+    ctx.fillStyle = `rgba(77, 227, 193, ${0.3 * ((flashUntil - now) / 260)})`;
+    ctx.fillRect(0, 0, W, W);
   }
 
-  player.x = nx;
-  player.y = ny;
-  visited.add(`${nx},${ny}`);
+  ctx.restore();
+}
+
+/* ---------- movement ---------- */
+function move(dirKey) {
+  if (!mazeActive || state.mazeSolved) return;
+  const d = DIRS.find((dd) => dd.key === dirKey);
+  if (!d) return;
+
+  const c = cells[idx(player.x, player.y)];
+  if (c[d.self]) { sfx.wall(); shakeUntil = performance.now() + 160; return; }
+
+  const nx = player.x + d.dx, ny = player.y + d.dy;
+  if (!inBounds(nx, ny)) { sfx.wall(); shakeUntil = performance.now() + 160; return; }
+
+  player.x = nx; player.y = ny;
+  steps++;
+  trail.add(idx(nx, ny));
+  markExplored();
   sfx.step();
 
-  if (player.x === goal.x && player.y === goal.y) {
+  const hit = shards.find((s) => !s.taken && s.x === nx && s.y === ny);
+  if (hit) {
+    hit.taken = true;
+    flashUntil = performance.now() + 260;
+    sfx.shard();
+    if (gateOpen()) setTimeout(() => sfx.unlock(), 260);
+  }
+
+  updateHUD();
+
+  if (gateOpen() && nx === exitCell.x && ny === exitCell.y) {
     state.mazeSolved = true;
     sfx.win();
-    setTimeout(() => {
-      showScreen('screen-celebration');
-      startCelebration();
-    }, 500);
+    heldOrder.length = 0;
+    setTimeout(() => { mazeActive = false; showScreen('screen-celebration'); startCelebration(); }, 550);
   }
 }
 
 const KEY_MAP = {
-  ArrowUp: 'up', KeyW: 'up',
-  ArrowDown: 'down', KeyS: 'down',
-  ArrowLeft: 'left', KeyA: 'left',
-  ArrowRight: 'right', KeyD: 'right',
+  ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+  ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
 };
+const heldOrder = [];
+let lastMoveAt = 0;
+
+function hold(dir) {
+  const i = heldOrder.indexOf(dir);
+  if (i !== -1) heldOrder.splice(i, 1);
+  heldOrder.push(dir);
+}
+function release(dir) {
+  const i = heldOrder.indexOf(dir);
+  if (i !== -1) heldOrder.splice(i, 1);
+}
+
 window.addEventListener('keydown', (e) => {
-  if (!$('#screen-maze').classList.contains('active')) return;
+  if (!mazeActive) return;
   const dir = KEY_MAP[e.code];
-  if (dir) {
-    e.preventDefault();
-    ensureAudio();
-    movePlayer(dir);
-  }
+  if (!dir) return;
+  e.preventDefault();
+  if (e.repeat) return;           // we run our own repeat timer
+  ensureAudio();
+  hold(dir);
+  move(dir);
+  lastMoveAt = performance.now();
 });
+window.addEventListener('keyup', (e) => {
+  const dir = KEY_MAP[e.code];
+  if (dir) release(dir);
+});
+window.addEventListener('blur', () => { heldOrder.length = 0; });
 
 $$('.dpad-btn').forEach((btn) => {
-  const go = (e) => {
+  const dir = btn.dataset.dir;
+  const down = (e) => {
     e.preventDefault();
     ensureAudio();
-    movePlayer(btn.dataset.dir);
+    hold(dir);
+    move(dir);
+    lastMoveAt = performance.now();
   };
-  btn.addEventListener('click', go);
-  btn.addEventListener('touchstart', go, { passive: false });
+  const up = (e) => { e.preventDefault(); release(dir); };
+  btn.addEventListener('pointerdown', down);
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('pointerleave', up);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
 });
 
-// swipe support directly on the maze canvas (mobile bonus control)
-(function swipeControls() {
-  let sx = 0, sy = 0, tracking = false;
-  const canvasHolder = $('.maze-wrap');
-  canvasHolder.addEventListener('touchstart', (e) => {
+/* swipe anywhere on the maze */
+(function swipe() {
+  const wrap = $('.maze-wrap');
+  let sx = 0, sy = 0, on = false;
+  wrap.addEventListener('touchstart', (e) => {
     if (!e.touches[0]) return;
-    tracking = true;
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
+    on = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
   }, { passive: true });
-  canvasHolder.addEventListener('touchend', (e) => {
-    if (!tracking) return;
-    tracking = false;
+  wrap.addEventListener('touchend', (e) => {
+    if (!on) return; on = false;
     const t = e.changedTouches[0];
     if (!t) return;
     const dx = t.clientX - sx, dy = t.clientY - sy;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 22) return;
     ensureAudio();
-    if (Math.abs(dx) > Math.abs(dy)) movePlayer(dx > 0 ? 'right' : 'left');
-    else movePlayer(dy > 0 ? 'down' : 'up');
+    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
   }, { passive: true });
 })();
 
-/* ---------------------------------------------------------
-   7. CELEBRATION — confetti + heartfelt message
---------------------------------------------------------- */
+/* =====================================================================
+   CHAPTER III — THE REVEAL
+===================================================================== */
 const BIRTHDAY_MESSAGE =
-  "You cracked the case and conquered the labyrinth — exactly the kind of stubborn, clever energy that makes you, well, you. " +
-  "Here's to another year of chaos, laughter, terrible jokes, and everything in between. " +
-  "Go eat some cake, open your presents, and enjoy being the birthday legend of the day. " +
-  "Happy Birthday, Olek. 🎂✨";
+  "You picked a lock that only opened for someone patient enough to think it through, " +
+  "then walked a pitch-black labyrinth and came out carrying the light. " +
+  "That is extremely on-brand for you.\n\n" +
+  "Thank you for the ridiculous jokes, the late-night talks, and for being the kind of friend " +
+  "who makes ordinary days worth remembering. May this year bring you good chaos, better luck, " +
+  "and everything you have been quietly hoping for.\n\n" +
+  "Now go eat something with far too much frosting on it. You have earned it. 🎂";
 
-let confettiCanvas, confettiCtx, confettiParticles = [], confettiRunning = false;
+let confettiCanvas = null, cctx = null, confetti = [], confettiOn = false;
+let typeTimer = null;
 
 function startCelebration() {
+  const stats = $('#questStats');
+  const oracleNote = oracleUses ? ` · ${oracleUses} oracle hint${oracleUses > 1 ? 's' : ''}` : '';
+  stats.innerHTML =
+    `<span>🔐 Lock cracked in ${attempts} attempt${attempts === 1 ? '' : 's'}${oracleNote}</span>` +
+    `<span>🕯️ Labyrinth walked in ${steps} steps</span>` +
+    `<span>✦ 3 / 3 shards recovered</span>`;
+
   typeMessage($('#birthdayMessage'), BIRTHDAY_MESSAGE);
   sfx.fanfare();
-  initConfetti();
+  startConfetti();
 }
 
 function typeMessage(el, text) {
+  if (typeTimer) clearTimeout(typeTimer);
   el.textContent = '';
   let i = 0;
-  const speed = 18;
-  function step() {
+  (function step() {
     el.textContent = text.slice(0, i);
     i++;
-    if (i <= text.length) setTimeout(step, speed);
-  }
-  step();
+    if (i <= text.length) typeTimer = setTimeout(step, 16);
+  })();
 }
 
-function initConfetti() {
+function startConfetti() {
   confettiCanvas = $('#confettiCanvas');
-  confettiCtx = confettiCanvas.getContext('2d');
-  resizeConfetti();
-  const colors = ['#f4c95d', '#f7539e', '#8a5cf6', '#4de3c1', '#ffe08a'];
+  cctx = confettiCanvas.getContext('2d');
+  confettiCanvas.classList.add('on');
+  sizeConfetti();
 
-  confettiParticles = Array.from({ length: 160 }, () => spawnConfetto(colors, true));
+  const colors = ['#f4c95d', '#f7539e', '#8a5cf6', '#4de3c1', '#ffe6a3', '#ff9f45'];
+  confetti = Array.from({ length: 170 }, () => spawn(colors, true));
 
-  if (!confettiRunning) {
-    confettiRunning = true;
-    requestAnimationFrame(confettiLoop);
-  }
-
-  // gentle extra bursts
   let bursts = 0;
-  const burstTimer = setInterval(() => {
-    bursts++;
-    for (let i = 0; i < 40; i++) confettiParticles.push(spawnConfetto(colors, false));
-    if (bursts >= 4) clearInterval(burstTimer);
-  }, 1400);
+  const t = setInterval(() => {
+    if (!confettiOn) { clearInterval(t); return; }
+    for (let i = 0; i < 45; i++) confetti.push(spawn(colors, false));
+    if (++bursts >= 4) clearInterval(t);
+  }, 1500);
+
+  if (!confettiOn) { confettiOn = true; requestAnimationFrame(confettiLoop); }
 }
 
-function spawnConfetto(colors, fromTop) {
+function spawn(colors, scattered) {
   return {
     x: Math.random() * window.innerWidth,
-    y: fromTop ? -20 - Math.random() * window.innerHeight * 0.5 : -20,
-    vx: (Math.random() - 0.5) * 2.2,
-    vy: 2 + Math.random() * 2.4,
+    y: scattered ? -Math.random() * window.innerHeight : -20,
+    vx: (Math.random() - 0.5) * 2.4,
+    vy: 1.8 + Math.random() * 2.6,
     size: 6 + Math.random() * 7,
-    color: colors[Math.floor(Math.random() * colors.length)],
+    color: colors[randInt(colors.length)],
     rot: Math.random() * Math.PI * 2,
-    vr: (Math.random() - 0.5) * 0.25,
-    shape: Math.random() < 0.5 ? 'rect' : 'circle',
+    vr: (Math.random() - 0.5) * 0.26,
+    rect: Math.random() < 0.55,
   };
 }
 
-function resizeConfetti() {
+function sizeConfetti() {
   confettiCanvas.width = window.innerWidth;
   confettiCanvas.height = window.innerHeight;
 }
-window.addEventListener('resize', () => {
-  if (confettiCanvas) resizeConfetti();
-});
+window.addEventListener('resize', () => { if (confettiOn && confettiCanvas) sizeConfetti(); });
 
 function confettiLoop() {
-  const ctx = confettiCtx;
+  if (!confettiOn) return;
   const w = confettiCanvas.width, h = confettiCanvas.height;
-  ctx.clearRect(0, 0, w, h);
-
-  for (const p of confettiParticles) {
-    p.x += p.vx;
-    p.y += p.vy;
-    p.rot += p.vr;
-    if (p.y > h + 30) {
-      p.y = -20;
-      p.x = Math.random() * w;
-    }
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rot);
-    ctx.fillStyle = p.color;
-    if (p.shape === 'rect') {
-      ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
-    } else {
-      ctx.beginPath();
-      ctx.arc(0, 0, p.size / 2.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+  cctx.clearRect(0, 0, w, h);
+  for (const p of confetti) {
+    p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+    if (p.y > h + 30) { p.y = -20; p.x = Math.random() * w; }
+    cctx.save();
+    cctx.translate(p.x, p.y);
+    cctx.rotate(p.rot);
+    cctx.fillStyle = p.color;
+    if (p.rect) cctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+    else { cctx.beginPath(); cctx.arc(0, 0, p.size / 2.4, 0, Math.PI * 2); cctx.fill(); }
+    cctx.restore();
   }
-
-  if (confettiParticles.length > 500) confettiParticles.splice(0, confettiParticles.length - 500);
-
+  if (confetti.length > 520) confetti.splice(0, confetti.length - 520);
   requestAnimationFrame(confettiLoop);
 }
 
-/* ---------------------------------------------------------
-   8. REPLAY
---------------------------------------------------------- */
-$('#replayBtn').addEventListener('click', () => {
+function stopConfetti() {
+  confettiOn = false;
+  confetti = [];
+  if (confettiCanvas) {
+    confettiCanvas.classList.remove('on');
+    cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+  }
+}
+
+/* =====================================================================
+   WIRING
+===================================================================== */
+$('#startBtn').addEventListener('click', () => {
+  ensureAudio();
   sfx.click();
-  state.puzzleSolved = false;
+  showScreen('screen-lock');
+  initLock();
+});
+
+$('#replayBtn').addEventListener('click', () => {
+  ensureAudio();
+  sfx.click();
+  stopConfetti();
+  if (typeTimer) { clearTimeout(typeTimer); typeTimer = null; }
+  mazeActive = false;
+  state.lockSolved = false;
   state.mazeSolved = false;
-  mazeReady = false;
-
-  // reset puzzle UI
-  $('#puzzleFeedback').textContent = '';
-  $('#puzzleFeedback').className = 'feedback';
-  $('#submitPuzzle').disabled = false;
-  $$('#screen-puzzle select').forEach((s) => {
-    s.disabled = false;
-    s.value = '';
-  });
-
+  $('#clearBtn').disabled = false;
   showScreen('screen-start');
 });

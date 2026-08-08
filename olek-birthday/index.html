@@ -4,67 +4,97 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
 <title>The Birthday Quest — For Olek</title>
-<meta name="description" content="A mysterious puzzle adventure birthday quest.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎁</text></svg>">
+<meta name="description" content="A mysterious two-chapter puzzle adventure hiding a birthday secret.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗝️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<canvas id="starfield"></canvas>
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
 
-<button id="muteBtn" class="icon-btn" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+<button id="muteBtn" class="icon-btn" aria-label="Toggle sound">🔊</button>
 
 <div id="app">
 
-  <!-- SCREEN 1: START -->
+  <!-- ============ SCREEN 1: START ============ -->
   <section id="screen-start" class="screen active">
     <div class="floating-emblem">🗝️</div>
-    <div class="title-wrap">
-      <p class="eyebrow">A mysterious adventure begins...</p>
-      <h1 class="game-title">THE BIRTHDAY<br>QUEST</h1>
-      <p class="subtitle">Somewhere in this quest, a secret waits for<br><span class="olek-name">OLEK</span>.</p>
+    <p class="eyebrow">An adventure in two chapters</p>
+    <h1 class="game-title">THE BIRTHDAY<br>QUEST</h1>
+    <p class="subtitle">
+      A sealed lock. A shifting labyrinth.<br>
+      At the end of it all, something waits for <span class="olek-name">OLEK</span>.
+    </p>
+    <button id="startBtn" class="btn btn-primary">Begin the Quest</button>
+    <div class="chapter-preview">
+      <div class="chapter-chip"><span>I</span> The Rune Lock</div>
+      <div class="chapter-chip"><span>II</span> The Labyrinth</div>
+      <div class="chapter-chip locked"><span>?</span> ???????</div>
     </div>
-    <button id="startBtn" class="btn btn-primary">
-      <span>Begin the Quest</span>
-    </button>
-    <p class="hint-text">🎂 Solve the mystery. Escape the labyrinth. Find what's hidden.</p>
   </section>
 
-  <!-- SCREEN 2: PUZZLE -->
-  <section id="screen-puzzle" class="screen">
+  <!-- ============ SCREEN 2: RUNE LOCK ============ -->
+  <section id="screen-lock" class="screen">
     <div class="panel">
-      <p class="chapter-label">Chapter I — The Missing Key</p>
-      <h2 class="panel-title">The Guests Who Stayed</h2>
-      <p class="flavor-text">Long after the cake was cut, four guests lingered at the table: <b>Nina</b>, <b>Kuba</b>, <b>Zosia</b>, and <b>Tomek</b>. One of them slipped away and hid the key to the labyrinth. Read the clues below carefully. Only pure logic will reveal the truth — there is exactly one guilty party.</p>
+      <p class="chapter-label">Chapter I — The Rune Lock</p>
+      <h2 class="panel-title">Crack the Sealed Code</h2>
+      <p class="flavor-text">
+        A stone door bars the way, set with <b>four rune slots</b>. The correct sequence uses
+        <b>four different runes</b> out of six — no rune ever repeats. Two ancient readings are
+        already carved into the door. Each attempt answers you honestly:
+      </p>
 
-      <ul id="clueList" class="clue-list"></ul>
-
-      <div class="deduction-form">
-        <div class="field">
-          <label for="selName">Who hid the key?</label>
-          <select id="selName"><option value="">— choose a name —</option></select>
-        </div>
-        <div class="field">
-          <label for="selFlavor">Their favorite cake flavor?</label>
-          <select id="selFlavor"><option value="">— choose a flavor —</option></select>
-        </div>
-        <div class="field">
-          <label for="selSpot">Where did they hide it?</label>
-          <select id="selSpot"><option value="">— choose a hiding spot —</option></select>
-        </div>
+      <div class="legend">
+        <div class="legend-item"><span class="pip pip-exact"></span> right rune, <b>right</b> slot</div>
+        <div class="legend-item"><span class="pip pip-near"></span> right rune, <b>wrong</b> slot</div>
       </div>
 
-      <button id="submitPuzzle" class="btn btn-primary">Make Your Accusation</button>
-      <p id="puzzleFeedback" class="feedback" role="status" aria-live="polite"></p>
+      <!-- Slots -->
+      <div class="slots" id="slots" role="group" aria-label="Your rune sequence">
+        <button class="slot" data-slot="0" aria-label="Slot 1"></button>
+        <button class="slot" data-slot="1" aria-label="Slot 2"></button>
+        <button class="slot" data-slot="2" aria-label="Slot 3"></button>
+        <button class="slot" data-slot="3" aria-label="Slot 4"></button>
+      </div>
+
+      <!-- Rune palette -->
+      <p class="mini-label">Tap a rune to place it · tap a slot to clear it</p>
+      <div class="palette" id="palette" role="group" aria-label="Available runes"></div>
+
+      <div class="lock-actions">
+        <button id="clearBtn" class="btn btn-ghost">Clear</button>
+        <button id="submitLock" class="btn btn-primary" disabled>Try the Lock</button>
+        <button id="oracleBtn" class="btn btn-ghost is-hidden">🔮 Consult the Oracle</button>
+      </div>
+
+      <p id="lockFeedback" class="feedback" role="status" aria-live="polite"></p>
+
+      <div class="log-wrap">
+        <p class="mini-label">Readings</p>
+        <ul id="lockLog" class="lock-log"></ul>
+      </div>
     </div>
   </section>
 
-  <!-- SCREEN 3: MAZE -->
+  <!-- ============ SCREEN 3: MAZE ============ -->
   <section id="screen-maze" class="screen">
     <div class="panel panel-wide">
       <p class="chapter-label">Chapter II — The Labyrinth</p>
-      <h2 class="panel-title">Find the Way</h2>
-      <p class="flavor-text">The key turns in a hidden lock. A labyrinth unfolds before you — somewhere inside, Olek's gift glows gold. Navigate the winding paths to reach it.</p>
+      <h2 class="panel-title">Gather the Light</h2>
+      <p class="flavor-text">
+        Darkness. You see only what your lantern touches. Collect all
+        <b>three shards of light</b> to unseal the gift in the far corner.
+      </p>
+
+      <div class="hud">
+        <div class="hud-item"><span class="hud-label">Shards</span><span id="hudShards" class="hud-value">0 / 3</span></div>
+        <div class="hud-item"><span class="hud-label">Steps</span><span id="hudSteps" class="hud-value">0</span></div>
+        <div class="hud-item"><span class="hud-label">Gate</span><span id="hudGate" class="hud-value locked">Sealed</span></div>
+      </div>
 
       <div class="maze-wrap">
         <canvas id="mazeCanvas"></canvas>
@@ -77,23 +107,25 @@
           <button data-dir="right" class="dpad-btn dpad-right" aria-label="Move right">▶</button>
           <button data-dir="down" class="dpad-btn dpad-down" aria-label="Move down">▼</button>
         </div>
-        <p class="hint-text">Use <b>WASD</b> / <b>Arrow Keys</b>, or the buttons above on mobile</p>
+        <p class="hint-text"><b>WASD</b> / <b>Arrow keys</b> — hold to keep moving. On mobile: buttons or swipe.</p>
       </div>
     </div>
   </section>
 
-  <!-- SCREEN 4: CELEBRATION -->
+  <!-- ============ SCREEN 4: CELEBRATION ============ -->
   <section id="screen-celebration" class="screen">
-    <canvas id="confettiCanvas"></canvas>
     <div class="celebration-content">
       <h1 class="birthday-title">🎉 HAPPY BIRTHDAY, OLEK! 🎉</h1>
       <div class="gift-reveal">🎁</div>
       <p id="birthdayMessage" class="birthday-message"></p>
+      <div id="questStats" class="quest-stats"></div>
       <button id="replayBtn" class="btn btn-secondary">Play the Quest Again</button>
     </div>
   </section>
 
 </div>
+
+<canvas id="confettiCanvas" aria-hidden="true"></canvas>
 
 <script src="script.js"></script>
 </body>
